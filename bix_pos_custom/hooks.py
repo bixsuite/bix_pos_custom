@@ -8,7 +8,7 @@ app_license = "mit"
 # Apps
 # ------------------
 
-# required_apps = []
+required_apps = ["posawesome"]
 
 # Each item in the list will be shown as an app in the apps page
 # add_to_apps_screen = [
@@ -41,6 +41,9 @@ app_license = "mit"
 
 # include js in page
 # page_js = {"page" : "public/js/file.js"}
+
+# include js, css files in header of desk.html
+app_include_js = "/assets/bix_pos_custom/js/pos_custom.js"
 
 # include js in doctype views
 # doctype_js = {"doctype" : "public/js/doctype.js"}
@@ -173,10 +176,10 @@ app_license = "mit"
 
 # Overriding Methods
 # ------------------------------
-#
-# override_whitelisted_methods = {
-# 	"frappe.desk.doctype.event.event.get_events": "bix_pos_custom.event.get_events"
-# }
+
+override_whitelisted_methods = {
+	"posawesome.posawesome.api.customers.create_customer": "bix_pos_custom.api.customer.create_customer"
+}
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,
