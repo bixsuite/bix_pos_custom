@@ -178,7 +178,8 @@ app_include_js = "/assets/bix_pos_custom/js/pos_custom.js"
 # ------------------------------
 
 override_whitelisted_methods = {
-	"posawesome.posawesome.api.customers.create_customer": "bix_pos_custom.api.customer.create_customer"
+	"posawesome.posawesome.api.customers.create_customer": "bix_pos_custom.api.customer.create_customer",
+	"posawesome.posawesome.api.invoices.get_draft_invoices": "bix_pos_custom.api.invoice.get_draft_invoices",
 }
 #
 # each overriding function accepts a `data` argument;

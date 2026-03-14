@@ -1,12 +1,9 @@
 /**
- * bix_pos_custom — POS item search enhancement (v3)
+ * bix_pos_custom — POS extensions (v4)
  *
- * Behavior:
- * - Barcode (pure numeric, 6–13 digits like UPC/EAN): posawesome handles normally
- * - Item code (alphanumeric like "INNAYA101"): on Enter, if exactly one item
- *   is displayed, click it to add to cart, then clear the search field.
- *
- * Supports both card view and table/list view (default).
+ * Features:
+ * 1. Item code auto-add on Enter (barcode vs item code detection)
+ * 2. Drafts dialog: search field + phone number column
  */
 (function () {
 	"use strict";
@@ -16,7 +13,7 @@
 	function log() {
 		if (!DEBUG) return;
 		var args = Array.prototype.slice.call(arguments);
-		args.unshift("[bix_pos_custom v3]");
+		args.unshift("[bix_pos_custom]");
 		console.log.apply(console, args);
 	}
 
@@ -193,11 +190,204 @@
 		} else {
 			detach();
 		}
+		/* Drafts dialog enhancements */
+		enhanceDraftsDialog();
+		injectDraftsPhoneColumn();
 	});
 
 	_observer.observe(document.body, { childList: true, subtree: true });
 
 	if (getShell()) {
 		attach();
+	}
+
+	/* ================================================================== */
+	/*  FEATURE 3: Drafts dialog — search field + phone column            */
+	/* ================================================================== */
+
+	var _draftsSearchInjected = false;
+
+	function enhanceDraftsDialog() {
+		var card = document.querySelector(".drafts-dialog-card");
+		if (!card) {
+			_draftsSearchInjected = false;
+			return;
+		}
+		if (_draftsSearchInjected) return;
+		_draftsSearchInjected = true;
+
+		/* Inject search input after the title */
+		var body = card.querySelector(".drafts-dialog-card__body");
+		if (!body) return;
+
+		var searchWrap = document.createElement("div");
+		searchWrap.style.cssText = "padding:4px 16px 8px;";
+		searchWrap.innerHTML =
+			'<input type="text" placeholder="Search invoices\u2026" ' +
+			'style="width:100%;padding:10px 14px;border:1px solid rgba(128,128,128,0.3);' +
+			'border-radius:10px;font-size:0.95rem;outline:none;background:transparent;' +
+			'color:inherit;" />';
+		body.parentNode.insertBefore(searchWrap, body);
+
+		var searchInput = searchWrap.querySelector("input");
+		searchInput.addEventListener("input", function () {
+			filterDrafts(card, this.value);
+		});
+		searchInput.focus();
+		log("Drafts search injected");
+	}
+
+	function filterDrafts(card, query) {
+		var needle = (query || "").trim().toLowerCase();
+
+		/* Table view: filter <tr> rows */
+		var rows = card.querySelectorAll(".drafts-dialog-table tbody tr");
+		for (var i = 0; i < rows.length; i++) {
+			var text = (rows[i].textContent || "").toLowerCase();
+			rows[i].style.display = !needle || text.indexOf(needle) !== -1 ? "" : "none";
+		}
+
+		/* Compact/mobile view: filter button items */
+		var items = card.querySelectorAll(".drafts-dialog-item");
+		for (var j = 0; j < items.length; j++) {
+			var txt = (items[j].textContent || "").toLowerCase();
+			items[j].style.display = !needle || txt.indexOf(needle) !== -1 ? "" : "none";
+		}
+	}
+
+	/* --- Phone column injection (table + compact views) --- */
+
+	var _draftsPhoneMap = {};
+	var _phoneFetchDone = false;
+
+	function injectDraftsPhoneColumn() {
+		var card = document.querySelector(".drafts-dialog-card");
+		if (!card) {
+			_phoneFetchDone = false;
+			_draftsPhoneMap = {};
+			return;
+		}
+
+		/* Table view */
+		var table = card.querySelector(".drafts-dialog-table");
+		if (table) {
+			_injectPhoneHeader(table);
+
+			/* Collect invoice names from rows that haven't been enhanced yet */
+			var rows = table.querySelectorAll("tbody tr");
+			var needsFetch = false;
+			var invoiceNames = [];
+			for (var i = 0; i < rows.length; i++) {
+				if (rows[i].querySelector(".bix-phone-cell")) continue;
+				var tds = rows[i].querySelectorAll("td");
+				if (tds.length < 6) continue;
+				needsFetch = true;
+				var name = (tds[4].textContent || "").trim();
+				if (name) invoiceNames.push(name);
+			}
+
+			if (needsFetch && !_phoneFetchDone && invoiceNames.length > 0) {
+				_phoneFetchDone = true;
+				log("Fetching phone data for " + invoiceNames.length + " invoices");
+				frappe.call({
+					method: "bix_pos_custom.api.invoice.get_invoice_phones",
+					args: { invoice_names: JSON.stringify(invoiceNames) },
+					async: true,
+					callback: function (r) {
+						if (r && r.message) {
+							_draftsPhoneMap = r.message;
+							log("Phone data received:", _draftsPhoneMap);
+							/* Now inject cells with the data */
+							var tbl = document.querySelector(
+								".drafts-dialog-card .drafts-dialog-table"
+							);
+							if (tbl) _injectPhoneCells(tbl);
+							/* Also handle compact view */
+							var crd = document.querySelector(".drafts-dialog-card");
+							if (crd) _injectPhoneCompact(crd);
+						}
+					},
+				});
+			} else if (Object.keys(_draftsPhoneMap).length > 0) {
+				_injectPhoneCells(table);
+			}
+		}
+
+		/* Compact view — inject if data already fetched */
+		if (Object.keys(_draftsPhoneMap).length > 0) {
+			_injectPhoneCompact(card);
+		}
+	}
+
+	function _injectPhoneHeader(table) {
+		var headerRow = table.querySelector("thead tr");
+		if (!headerRow || headerRow.querySelector(".bix-phone-header")) return;
+		var ths = headerRow.querySelectorAll("th");
+		/* ths: [0]=checkbox, [1]=Customer, [2]=Date, [3]=Time, [4]=Invoice, [5]=Amount */
+		if (ths.length < 2) return;
+
+		var phoneTh = document.createElement("th");
+		phoneTh.className = "bix-phone-header v-data-table__th";
+		phoneTh.textContent = "Phone";
+		phoneTh.style.cssText =
+			"text-align:start;font-size:0.75rem;font-weight:600;" +
+			"letter-spacing:0.02em;padding:0 16px;height:48px;";
+
+		/* Insert after Customer (ths[1]), before Date (ths[2]) */
+		if (ths[2]) {
+			headerRow.insertBefore(phoneTh, ths[2]);
+		} else {
+			headerRow.appendChild(phoneTh);
+		}
+		log("Phone header injected");
+	}
+
+	function _injectPhoneCells(table) {
+		var rows = table.querySelectorAll("tbody tr");
+		for (var i = 0; i < rows.length; i++) {
+			if (rows[i].querySelector(".bix-phone-cell")) continue;
+			var tds = rows[i].querySelectorAll("td");
+			/* Need at least 6 cols: checkbox, customer, date, time, invoice, amount */
+			if (tds.length < 6) continue;
+
+			/* Invoice name is at tds[4] (before our injection shifts indices) */
+			var invoiceName = (tds[4].textContent || "").trim();
+			var phone = _draftsPhoneMap[invoiceName] || "";
+
+			var phoneTd = document.createElement("td");
+			phoneTd.className = "bix-phone-cell v-data-table__td";
+			phoneTd.textContent = phone;
+			phoneTd.style.cssText = "padding:0 16px;";
+
+			/* Insert after customer (tds[1]), before date (tds[2]) */
+			if (tds[2]) {
+				rows[i].insertBefore(phoneTd, tds[2]);
+			}
+		}
+	}
+
+	function _injectPhoneCompact(card) {
+		var items = card.querySelectorAll(".drafts-dialog-item");
+		for (var j = 0; j < items.length; j++) {
+			if (items[j].querySelector(".bix-phone-display")) continue;
+
+			var identity = items[j].querySelector(".drafts-dialog-item__identity");
+			if (!identity) continue;
+
+			/* Invoice name is in the <span> inside identity */
+			var span = identity.querySelector("span");
+			if (!span) continue;
+			var invoiceName = (span.textContent || "").trim();
+
+			var phone = _draftsPhoneMap[invoiceName] || "";
+			if (!phone) continue;
+
+			var phoneEl = document.createElement("span");
+			phoneEl.className = "bix-phone-display";
+			phoneEl.style.cssText = "font-size:0.85em;opacity:0.7;display:block;";
+			phoneEl.textContent = phone;
+
+			identity.appendChild(phoneEl);
+		}
 	}
 })();

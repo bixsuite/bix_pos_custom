@@ -6,21 +6,17 @@ Custom POS extensions for [POSAwesome](https://github.com/yrestom/POS-Awesome).
 
 **1. Customer Phone Number Uniqueness**
 - Phone number is mandatory when creating or updating a customer from POS.
-- Duplicate phone numbers are rejected (each phone number must be unique across customers).
-- Customer names are allowed to be duplicated (multiple customers can share the same name).
-- On update, the current customer is excluded from the uniqueness check.
+- Duplicate phone numbers are rejected across all customers.
+- Duplicate customer names are allowed.
 
 **2. Item Code Auto-Add on Enter**
-- When an alphanumeric item code (e.g. `INNAYA101`) is typed in the POS search field and Enter is pressed, if exactly one item matches, it is automatically added to the cart.
-- The search field is cleared after adding, ready for the next scan/entry.
-- Standard barcodes (UPC/EAN — pure numeric, 6–13 digits) are left to POSAwesome's native barcode handler.
-- Works with both card view and table/list view (default).
-
-### Requirements
-
-- [POSAwesome](https://github.com/yrestom/POS-Awesome)
+- Type an alphanumeric item code in the search field and press Enter — if exactly one item matches, it is automatically added to the cart and the search field is cleared.
+- Standard barcodes (UPC/EAN) are handled natively by POSAwesome.
+- Works with both card view and table/list view.
 
 ### Installation
+
+Requires [POSAwesome](https://github.com/yrestom/POS-Awesome) to be installed.
 
 ```bash
 cd $PATH_TO_YOUR_BENCH
